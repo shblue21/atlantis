@@ -186,6 +186,11 @@ type ListLocksResult struct {
 func (a *APIController) ListLocks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	if code, err := a.apiValidateToken(r); err != nil {
+		a.apiReportError(w, code, err)
+		return
+	}
+
 	locks, err := a.Locker.List()
 	if err != nil {
 		a.apiReportError(w, http.StatusInternalServerError, err)
@@ -214,6 +219,19 @@ func (a *APIController) ListLocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.respond(w, logging.Warn, http.StatusOK, "%s", string(response))
+}
+
+func (a *APIController) apiValidateToken(r *http.Request) (int, error) {
+	if len(a.APISecret) == 0 {
+		return http.StatusBadRequest, fmt.Errorf("ignoring request since API is disabled")
+	}
+
+	secret := r.Header.Get(atlantisTokenHeader)
+	if secret != string(a.APISecret) {
+		return http.StatusUnauthorized, fmt.Errorf("header %s did not match expected secret", atlantisTokenHeader)
+	}
+
+	return http.StatusOK, nil
 }
 
 func (a *APIController) apiSetup(ctx *command.Context, cmdName command.Name) error {
@@ -334,14 +352,8 @@ func (a *APIController) apiApply(request *APIRequest, ctx *command.Context) (*co
 }
 
 func (a *APIController) apiParseAndValidate(r *http.Request) (*APIRequest, *command.Context, int, error) {
-	if len(a.APISecret) == 0 {
-		return nil, nil, http.StatusBadRequest, fmt.Errorf("ignoring request since API is disabled")
-	}
-
-	// Validate the secret token
-	secret := r.Header.Get(atlantisTokenHeader)
-	if secret != string(a.APISecret) {
-		return nil, nil, http.StatusUnauthorized, fmt.Errorf("header %s did not match expected secret", atlantisTokenHeader)
+	if code, err := a.apiValidateToken(r); err != nil {
+		return nil, nil, code, err
 	}
 
 	// Parse the JSON payload

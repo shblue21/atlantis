@@ -306,6 +306,7 @@ func TestAPIController_ListLocks(t *testing.T) {
 	When(ac.Locker.List()).ThenReturn(mockLocks, nil)
 
 	req, _ := http.NewRequest("GET", "", nil)
+	req.Header.Set(atlantisTokenHeader, atlantisToken)
 	w := httptest.NewRecorder()
 	ac.ListLocks(w, req)
 	response, _ := io.ReadAll(w.Result().Body)
@@ -323,6 +324,7 @@ func TestAPIController_ListLocksEmpty(t *testing.T) {
 	When(ac.Locker.List()).ThenReturn(mockLocks, nil)
 
 	req, _ := http.NewRequest("GET", "", nil)
+	req.Header.Set(atlantisTokenHeader, atlantisToken)
 	w := httptest.NewRecorder()
 	ac.ListLocks(w, req)
 	response, _ := io.ReadAll(w.Result().Body)
@@ -330,6 +332,25 @@ func TestAPIController_ListLocksEmpty(t *testing.T) {
 	err := json.Unmarshal(response, &result)
 	Ok(t, err)
 	Equals(t, expected, result)
+}
+
+func TestAPIController_ListLocks_WithoutToken(t *testing.T) {
+	ac, _, _ := setup(t)
+
+	req, _ := http.NewRequest("GET", "", nil)
+	w := httptest.NewRecorder()
+	ac.ListLocks(w, req)
+	ResponseContains(t, w, http.StatusUnauthorized, "did not match expected secret")
+}
+
+func TestAPIController_ListLocks_APIDisabled(t *testing.T) {
+	ac, _, _ := setup(t)
+	ac.APISecret = nil
+
+	req, _ := http.NewRequest("GET", "", nil)
+	w := httptest.NewRecorder()
+	ac.ListLocks(w, req)
+	ResponseContains(t, w, http.StatusBadRequest, "API is disabled")
 }
 
 func setup(t *testing.T) (controllers.APIController, *MockProjectCommandBuilder, *MockProjectCommandRunner) {
